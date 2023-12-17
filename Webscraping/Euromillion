@@ -1,0 +1,208 @@
+### EUROMILLION DATASET
+This code is the first step in order to build a dataviz on Euromillion dataset from 2004. It's show how to scrape and clean data.
+/*\ if you want to use this code, you need to download Chrome webdriver (https://chromedriver.chromium.org/downloads)
+
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+
+from time import sleep
+from bs4 import BeautifulSoup
+from urllib.error import HTTPError
+
+import requests
+import pandas as pd
+
+# URLs to scrape
+url_result = "https://www.euro-millions.com/results-history-2023"
+url_winner = "https://www.euro-millions.com/winners/statistics"
+```
+
+### Define functions
+def Url_html_content(url):
+    # function who requests the html content of a website
+    try:
+        request = requests.get(url)
+        # multi_valued_attributes=None => for html class with space (i.e: on url_result class=centred noBefore and centred -cf below)
+        # doc : https://groups.google.com/g/beautifulsoup/c/o6wwt1j7ELk
+        html = BeautifulSoup(request.content, 'html.parser', multi_valued_attributes=None)
+    except HTTPError:
+        print(HTTPError)
+    return html
+
+def Year_for_url(url):
+    # Use the html from Url_html_content
+    html = Url_html_content(url)
+    # retrieve all years for creating new url
+    uls = html.find('div', class_='dropdown').findAll('li')
+    
+    list_year = []
+    for ul in uls:
+        if len(ul.text.strip()) != 4:
+            continue
+        list_year.append(ul.text.strip())
+    return list_year
+
+def Urls(url):
+    # create the list of urls to retrieve data
+    years = Year_for_url(url)
+    list_url = ["https://www.euro-millions.com/results-history-"+year for year in years]
+    return list_url
+
+def Append_7(data_toappend):
+    # create 7 times the same result to have a row = a number out
+    mylist_name = [data_toappend for i in range(7)]
+    return mylist_name
+
+def Concat_list(mylist_name_1, mylist_name_2):
+    # concat 2 lists with * : create new list
+    return [*mylist_name_1, *mylist_name_2]
+
+def Df_join_left(df_left, df_right, id):
+    return pd.merge(df_left, df_right, on=id, how='left')
+```
+
+#### Method with BeautifulSoup : for result dataset
+
+# Declare les items to extract (for results)
+day_name = []
+date = []
+number = []
+jackpot_amount = []
+
+# Declare les items to extract (for winners)
+winners = []
+
+# Get all urls to extract data
+list_url = Urls(url_result)
+
+# Retrieve all data from results
+for url in list_url:
+    # get all html content of each url depending on the year
+    html_result = Url_html_content(url)
+    for element in html_result.find_all('tr', class_='resultRow'):
+        # Extract date et day name
+        for item in element.find_all('td', class_='date noBefore'):
+            date_format = element.find('a')['href'].split('/')[2]
+            date_format = date_format.replace('-', '/')
+            date = Concat_list(date, Append_7(date_format))
+            
+            day_name = Concat_list(day_name, Append_7(element.find('strong').text))
+
+        # Extract the numbers out according on the date
+        balls = [ball for ball in element.find('td', class_='centred noBefore').find_all('li')]
+        for item in balls:
+            if 'lucky-star' in item['class']:
+                number.append('star:'+item.text.strip())
+            else:
+                number.append('number:'+item.text.strip())
+
+        # Extract the amount of the euromillion & if it's a jackpot won
+        for jackpot in element.find_all('td', class_='centred'):
+            # span is where is the status of the jackpot
+            jackpot_status = [j for j in jackpot.find('span')]
+            # when not Jackpot Won! there are several span, so take only first iteration for control
+            for status in jackpot_status[:1]:
+                if status.text == "Jackpot Won!":
+                    jj = 'Jackpot Won:' + jackpot.find('strong').text
+                    # remove € and , for dataviz
+                    jj = jj.replace('€', "").replace(',', '')
+                    jackpot_amount = Concat_list(jackpot_amount, Append_7(jj))
+                else:
+                    jj = 'Jackpot:' + jackpot.find('strong').text
+                    # remove € and , for dataviz
+                    jj = jj.replace('€', "").replace(',', '')
+                    jackpot_amount = Concat_list(jackpot_amount, Append_7(jj))
+
+#### Method with Selenium : for winner dataset
+
+# Configure webdriver to use Selenium package
+options = Options()
+# hide HUI
+options.headless = True
+options.add_argument("start-maximized")
+
+# configure chrome browser to not load images and javascript
+chrome_options = webdriver.ChromeOptions()
+chrome_options.add_experimental_option("prefs", {"profile.managed_default_content_settings.images": 2})
+
+driver = webdriver.Chrome(options=options)
+driver.get(url_winner)
+
+# Click on the button to expand all pages and retrieve data
+driver.find_element(By.CLASS_NAME, "fc-button-label").click()
+button = driver.find_element(By.LINK_TEXT, "View All Jackpots")
+button.click()
+
+index_to_remove = [1, 2, 3]
+# Get the first elements of the html content with all info on the winner
+first_row = driver.find_element(By.XPATH, '//*[@id="allWonJackpotsTable"]/tbody/tr[1]')
+first_row_winner = first_row.text.split(' ')
+# remove elements not wanted at index 1, 2 and 3 from list
+first_row_winner = [ele for idx, ele in enumerate(first_row_winner) if idx not in index_to_remove]
+
+# add the first row to winners
+winners.append(first_row_winner)
+
+# Get all the siblings
+siblings = first_row.find_elements(By.XPATH, "following-sibling::*")
+for sibling in siblings[:]:
+    w = sibling.text.split(' ')
+    # some date have a length > 10
+    if len(w[0]) != len("dd/mm/yyyy"):
+        # replace the first element in list we by the correct lenght date
+        w[0] = w[0][:len("dd/mm/yyyy")]
+        
+    # remove elements not wanted at index 1 and 3 from list winner
+    w = [ele for idx, ele in enumerate(w) if idx not in index_to_remove]
+    
+    # add all siblings to winners
+    winners.append(w)
+
+sleep(80)
+driver.quit()
+
+### Df Results
+# Create the result dateframe (df)
+concat_list_all = list(zip(date, day_name, number, jackpot_amount))
+df_result = pd.DataFrame(concat_list_all, 
+                         columns=['Date', 'Day_name', 'Numbers_out', 'Jackpot_amount']
+                        )
+
+# Split columns into 2 columns
+df_result[['Number_or_Star', 'Numbers_out']] = df_result['Numbers_out'].str.split(':', expand=True)
+df_result[['Jackpot_status', 'Jackpot_amount']] = df_result['Jackpot_amount'].str.split(":", expand=True)
+```
+
+### Df Winners
+# several countries and numbers can win in the same date
+df_winner = pd.DataFrame(winners,
+                         columns = ['Date', 
+                                    'Country_1', 
+                                    'Number_1', 
+                                    'Country_2', 
+                                    'Number_2', 
+                                    'Country_3', 
+                                    'Number_3',
+                                    'Country_4', 
+                                    'Number_4', 
+                                    'Country_5', 
+                                    'Number_5', 
+                                    'Country_6', 
+                                    'Number_6']
+                        )
+
+# remove , from number_x
+df_winner[df_winner.columns] = df_winner.apply(lambda x: x.str.rstrip(','))
+
+# Join the 2 df and save as csv
+df = Df_join_left(df_result, df_winner, "Date")
+df.to_csv("Euromillion_dataset.csv", encoding='utf-8', index=False)
+
+**Sources and go futher**
+* [BeautifulSoup](https://beautiful-soup-4.readthedocs.io/en/latest/)
+* [Selenium](https://selenium-python.readthedocs.io/)
+* [Tuto 1](https://blog.finxter.com/python-beautifulsoup-examples/)
+* [Tuto 2](https://realpython.com/beautiful-soup-web-scraper-python/)
+* [Tuto 3](https://scrapfly.io/blog/web-scraping-with-selenium-and-python/)
+

@@ -5,18 +5,15 @@ This code is the first step in order to build a dataviz on Euromillion dataset f
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
-
 from time import sleep
 from bs4 import BeautifulSoup
 from urllib.error import HTTPError
-
 import requests
 import pandas as pd
 
 # URLs to scrape
 url_result = "https://www.euro-millions.com/results-history-2023"
 url_winner = "https://www.euro-millions.com/winners/statistics"
-```
 
 ### Define functions
 def Url_html_content(url):
@@ -60,10 +57,8 @@ def Concat_list(mylist_name_1, mylist_name_2):
 
 def Df_join_left(df_left, df_right, id):
     return pd.merge(df_left, df_right, on=id, how='left')
-```
 
 #### Method with BeautifulSoup : for result dataset
-
 # Declare les items to extract (for results)
 day_name = []
 date = []
@@ -115,7 +110,6 @@ for url in list_url:
                     jackpot_amount = Concat_list(jackpot_amount, Append_7(jj))
 
 #### Method with Selenium : for winner dataset
-
 # Configure webdriver to use Selenium package
 options = Options()
 # hide HUI
@@ -172,7 +166,6 @@ df_result = pd.DataFrame(concat_list_all,
 # Split columns into 2 columns
 df_result[['Number_or_Star', 'Numbers_out']] = df_result['Numbers_out'].str.split(':', expand=True)
 df_result[['Jackpot_status', 'Jackpot_amount']] = df_result['Jackpot_amount'].str.split(":", expand=True)
-```
 
 ### Df Winners
 # several countries and numbers can win in the same date
